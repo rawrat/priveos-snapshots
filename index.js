@@ -23,8 +23,12 @@ async function main() {
   sqlite.run("CREATE TABLE IF NOT EXISTS ipfs (hash TEXT UNIQUE, data TEXT)")
   sqlite.run("CREATE TABLE IF NOT EXISTS store (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT)")
   sqlite.run("CREATE TABLE IF NOT EXISTS accessgrant (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT)")
+  sqlite.run("CREATE TABLE IF NOT EXISTS index_state (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT)")
 
-  let blockNumber = 1
+  const index_state = await db.collection('index_state').findOne()
+  sqlite.run("insert into index_state (data) values (?)", [JSON.stringify(index_state)])
+
+  let blockNumber = 0
   while(true) {
     const blocks = await db.collection('store').find({"blockNumber": { $gt: blockNumber}}).sort({"blockNumber": 1}).limit(100).toArray()
     console.log("Store blocks.length: ", blocks.length)
@@ -46,7 +50,7 @@ async function main() {
     }
   }
   
-  blockNumber = 1
+  blockNumber = 0
   while(true) {
     const blocks = await db.collection('accessgrant').find({"blockNumber": { $gt: blockNumber}}).sort({"blockNumber": 1}).limit(100).toArray()
     

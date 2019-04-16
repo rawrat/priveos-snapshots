@@ -6,7 +6,7 @@ mongodump --excludeCollection=data --excludeCollection=state_history -d priveos
 # this will create a file named priveos-ipfs-snapshot.sqlite
 node src/dump_ipfs.js
 
-tarball="priveos_snapshot_$(date +%Y-%m-%d_%H:%M).tar.gz"
+tarball="priveos_snapshot_$(date +%Y-%m-%d_%H_%M).tar.gz"
 
 tar cfz $tarball dump priveos-ipfs-snapshot.sqlite 
 

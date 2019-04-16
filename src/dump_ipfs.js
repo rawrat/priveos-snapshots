@@ -59,9 +59,7 @@ async function main() {
 async function copy_from_ipfs(block) {
   const hash = block.data.data
   try {
-    console.log("getting hash ", hash)
     const data = await ipfs_get(hash)
-    console.log("received: ", data)
     await sqlite.runAsync("insert into ipfs (hash, data) values (?, ?)", [hash, data])
   } catch(e) {
     console.log(`Error in block ${JSON.stringify(block)}: ${e}`)

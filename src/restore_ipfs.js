@@ -1,9 +1,5 @@
 'use strict'
-const Mongo = require('./mongo')
 const sqlite3 = require('sqlite3')
-const mongoUrl = 'mongodb://127.0.0.1:27017'
-const dbName = 'priveos2'
-const mongo = new Mongo(mongoUrl, dbName)
 const ipfsClient = require('ipfs-http-client')
 const assert = require('assert')
 const _ = require('underscore')
@@ -22,9 +18,7 @@ const config = {
 const ipfs = ipfsClient(config.ipfsConfig.host, config.ipfsConfig.port, {'protocol': config.ipfsConfig.protocol})
 
 async function main() {
-  const sqlite = new sqlite3.Database('priveos-ipfs-snapshot.sqlite')
-  const db = await mongo.db()
-  
+  const sqlite = new sqlite3.Database('priveos-ipfs-snapshot.sqlite')  
   let offset = 0
   let count = 0
   while(true) {
@@ -49,7 +43,6 @@ async function main() {
   console.log("Total number of hashes: ", count)
 
   sqlite.close()
-  mongo._connection.close()
 }
 
 main()

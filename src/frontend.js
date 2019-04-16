@@ -2,7 +2,6 @@
 const restify = require('restify')
 const fs = require('fs').promises
 const server = restify.createServer()
-server.use(restify.plugins.bodyParser())
 
 server.get('/', async function(req, res, next) {
   const hash = (await fs.readFile('latest.txt', 'utf8')).trim()

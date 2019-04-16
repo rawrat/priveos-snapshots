@@ -15,5 +15,11 @@ rm priveos-ipfs-snapshot.sqlite
 rm -rf dump
 
 # publish the tarball
-hash=$(ipfs --api=/ip4/127.0.0.1/tcp/5001 add -Q $tarball)
-echo $hash > latest.txt
+hash=$(ipfs --api=/ip4/127.0.0.1/tcp/5001 add -w -Q $tarball)
+
+if [ -f latest.txt ]; then
+    old=$(dirname `cat latest.txt`)
+    ipfs --api=/ip4/127.0.0.1/tcp/5001 pin rm $old
+fi
+
+echo "$hash/$tarball" > latest.txt

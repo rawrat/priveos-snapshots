@@ -1,6 +1,6 @@
 'use strict'
 const Mongo = require('./mongo')
-const config = require('./config')
+const config = require('./config.json')
 const assert = require('assert')
 const _ = require('underscore')
 const fs = require('fs')
@@ -15,8 +15,14 @@ const CHUNK_SIZE = 10
 const START_BLOCK = config.startBlock || 0
 
 async function main() {
-  const mongo = new Mongo(config.mongoUrl, config.dbName)
-  const file = fs.createWriteStream('ipfs_dump.txt', 'utf8', 'w')
+  for(const chain of config.chains) {
+    await dump(chain)
+  }
+}
+
+async function dump(chain) {
+  const mongo = new Mongo(config.mongoUrl, chain.dbName)
+  const file = fs.createWriteStream(`ipfs_dump_${chain.name}.txt`, 'utf8', 'w')
   const db = await mongo.db()
 
   let blockNumber = START_BLOCK

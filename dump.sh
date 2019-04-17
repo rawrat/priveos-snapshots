@@ -1,25 +1,36 @@
-#!/bin/sh -e
+#!/bin/sh 
 
-# this will create a dump dir in the local path
-mongodump --excludeCollection=data --excludeCollection=state_history -d priveos
-
-# this will create a file named ipfs_dump.txt
 node src/dump_ipfs.js
 
-tarball="priveos_snapshot_$(date +%Y-%m-%d_%H_%M).tar.gz"
+json=$(cat src/config.json)
+chains=$(jq -c .chains[] src/config.json )
+# echo $chains
 
-tar cfz $tarball dump ipfs_dump.txt
+for chain in $chains; do
+  dbName=$(echo "$chain" | jq -r '.dbName')
+  chainName=$(echo "$chain" | jq -r '.name')
+  mongodump --excludeCollection=data --excludeCollection=state_history --db="$dbName" --out="dump_$chainName" 
+  tarball="priveos_snapshot_${chainName}_$(date +%Y-%m-%d_%H_%M).tar.gz"
 
-# remove temporary files from above
-rm ipfs_dump.txt 
-rm -rf dump
+  tar cfz $tarball "dump_$chainName" ipfs_dump_${chainName}.txt
+  
+  # remove temporary files from above
+  rm ipfs_dump_${chainName}.txt 
+  rm -rf "dump_$chainName"
+  
+  # publish the tarball
+  hash=$(ipfs --api=/ip4/127.0.0.1/tcp/5001 add -w -Q $tarball)
+  
+  if [ -f "hashes/latest_${chainName}.txt" ]; then
+      old=$(dirname `cat "hashes/latest_${chainName}.txt"`)
+      ipfs --api=/ip4/127.0.0.1/tcp/5001 pin rm $old
+  fi
+  mkdir -p hashes
+  echo "$hash/$tarball" > "hashes/latest_${chainName}.txt"
+done
 
-# publish the tarball
-hash=$(ipfs --api=/ip4/127.0.0.1/tcp/5001 add -w -Q $tarball)
 
-if [ -f latest.txt ]; then
-    old=$(dirname `cat latest.txt`)
-    ipfs --api=/ip4/127.0.0.1/tcp/5001 pin rm $old
-fi
 
-echo "$hash/$tarball" > latest.txt
+
+
+

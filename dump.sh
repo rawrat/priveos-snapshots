@@ -3,15 +3,15 @@
 # this will create a dump dir in the local path
 mongodump --excludeCollection=data --excludeCollection=state_history -d priveos
 
-# this will create a file named priveos-ipfs-snapshot.sqlite
+# this will create a file named ipfs_dump.txt
 node src/dump_ipfs.js
 
 tarball="priveos_snapshot_$(date +%Y-%m-%d_%H_%M).tar.gz"
 
-tar cfz $tarball dump priveos-ipfs-snapshot.sqlite 
+tar cfz $tarball dump ipfs_dump.txt
 
 # remove temporary files from above
-rm priveos-ipfs-snapshot.sqlite 
+rm ipfs_dump.txt 
 rm -rf dump
 
 # publish the tarball

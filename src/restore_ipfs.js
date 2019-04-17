@@ -1,48 +1,69 @@
 'use strict'
-const sqlite3 = require('sqlite3')
+const config = require('./config')
 const ipfsClient = require('ipfs-http-client')
 const assert = require('assert')
 const _ = require('underscore')
+const fs = require('fs')
+const readline = require('readline')
 const Bluebird = require('bluebird')
-Bluebird.promisifyAll(sqlite3)
 
 const CHUNK_SIZE = 500
 
-const config = {
-  ipfsConfig: {
-    host: 'localhost',
-    port: '5001',
-    protocol: 'http',
-  }
-}
-const ipfs = ipfsClient(config.ipfsConfig.host, config.ipfsConfig.port, {'protocol': config.ipfsConfig.protocol})
 
 async function main() {
-  const sqlite = new sqlite3.Database('priveos-ipfs-snapshot.sqlite')  
-  let offset = 0
+  const ipfs = ipfsClient(config.ipfsConfig.host, config.ipfsConfig.port, {'protocol': config.ipfsConfig.protocol})
+  const file = fs.createReadStream('ipfs_dump.txt', 'utf8')
+  const rl = readline.createInterface({
+    input: file,
+    crlfDelay: Infinity
+  })
   let count = 0
-  while(true) {
-    const rows = await sqlite.allAsync("select * from ipfs order by hash limit ? offset ?",[CHUNK_SIZE, offset])  
-    
-    if(!rows.length) {
-      break
-    }
-    
+  
+  /*
+   * This queue waits until CHUNK_SIZE items have been pushed into it
+   * and then calls the callback with those items and clears the list.
+   */
+  const queue = new Queue(CHUNK_SIZE, async (rows) => {
     const files = rows.map(row => Buffer.from(row.data))
     const results = await ipfs.add(files, {pin: true})
     for (const [row, result] of _.zip(rows, results)) {
-      // console.log(`row.hash: ${row.hash} result.hash: ${result.hash}`)
+      // make sure the hash of the newly imported file is identical
       assert.equal(row.hash, result.hash)
       count++
     }
-    
-    offset += CHUNK_SIZE
-    // console.log("Finished! offset: ", offset)
+    console.log("Finished chunk! count: ", count)
+  })
+  for await (const line of rl) {
+    const [hash, data] = line.split('|||')
+    await queue.push({hash, data})
   }
   
+  /* 
+   * If there are undrained items in the queue, call the callback 
+   * with those now.
+   */
+  await queue.drain()
   console.log("Total number of hashes: ", count)
+}
 
-  sqlite.close()
+class Queue {
+  constructor(chunk_size, callback) {
+    this.list = []
+    this.chunk_size = chunk_size
+    this.callback = callback
+  }
+    
+  async push(e) {
+    this.list.push(e)
+    if(this.list.length >= this.chunk_size) {
+      await this.drain()
+    }
+  }
+  
+  async drain() {
+    await this.callback(this.list)
+    this.list = []
+  }
 }
 
 main()

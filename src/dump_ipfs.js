@@ -1,69 +1,73 @@
 'use strict'
 const Mongo = require('./mongo')
-const sqlite3 = require('sqlite3')
-const mongoUrl = 'mongodb://127.0.0.1:27017'
-const dbName = 'priveos'
+const config = require('./config')
+const assert = require('assert')
+const _ = require('underscore')
+const fs = require('fs')
 const axios = require('axios')
 axios.defaults.timeout = 10000 // make sure we're not hanging forever
 global.Promise = require('bluebird')
-Promise.promisifyAll(sqlite3)
 
-const config = {
-  ipfsConfig: {
-    host: 'localhost',
-    port: '5001',
-    protocol: 'http',
-  }
-}
+
 let ipfs
 
 const CHUNK_SIZE = 10
-const START_BLOCK = 0
-
-let sqlite
+const START_BLOCK = config.startBlock || 0
 
 async function main() {
-  const mongo = new Mongo(mongoUrl, dbName)
-
-  sqlite = new sqlite3.Database('priveos-ipfs-snapshot.sqlite')
+  const mongo = new Mongo(config.mongoUrl, config.dbName)
+  const file = fs.createWriteStream('ipfs_dump.txt', 'utf8', 'w')
   const db = await mongo.db()
-  await sqlite.runAsync("CREATE TABLE IF NOT EXISTS ipfs (hash TEXT UNIQUE, data TEXT)")
 
   let blockNumber = START_BLOCK
   while(true) {
-    const a = new Date()
     const blocks = await db.collection('store').find({"blockNumber": { $gt: blockNumber}}).sort({"blockNumber": 1}).limit(CHUNK_SIZE).toArray()
     // console.log("Store blocks.length: ", blocks.length)
     if(!blocks.length) {
       break
     }
     
+    const hashes = blocks.map(x => x.data.data)
+    
     // we're running these in parallel
-    const promises = blocks.map(x => copy_from_ipfs(x))
-    await Promise.all(promises)
+    const promises = blocks.map(x => ipfs_get(x))
+    const datasets = await Promise.all(promises)
+    
+    const lines = serialize(hashes, datasets)
+    for (const line of lines) {
+      file.write(line)      
+    }
     
     // increment blockNumber count for next run of the loop
     blockNumber = blocks[blocks.length-1].blockNumber
-    const b = new Date()
-    // console.log(`Loop took ${b-a}`)
+
     if(blockNumber % 20 == 0) {
       console.log("Block: ", blockNumber)
     }
   }
   
   console.log("Finished!")
-  sqlite.close()
+  file.end()
   mongo._connection.close()
 }
 
-async function copy_from_ipfs(block) {
-  const hash = block.data.data
-  try {
-    const data = await ipfs_get(hash)
-    await sqlite.runAsync("insert into ipfs (hash, data) values (?, ?)", [hash, data])
-  } catch(e) {
-    console.log(`Error in block ${JSON.stringify(block)}: ${e}`)
+/* That data can never contain "|||". If it does, something fishy is going on. */
+function validate(str) {
+  return !str.includes('|||')
+}
+
+function serialize(hashes, datasets) {
+  let lines = []
+  for (const [hash, data] of _.zip(hashes, datasets)) {
+    assert.ok(hash, "Hash must not be null")
+    if(!data) {
+      continue
+    }
+    assert.ok(validate(data))
+    assert.ok(validate(hash))
+    lines.push([hash, data].join('|||') + '\n')
   }
+  return lines
 }
 
 /* 
@@ -72,14 +76,19 @@ async function copy_from_ipfs(block) {
  * available, the API hangs indefinitely and ipfs.get does not allow one 
  * to set a timeout.
  */
-async function ipfs_get(hash) {
+async function ipfs_get(block) {
+  const hash = block.data.data
   const url = `${config.ipfsConfig.protocol}://${config.ipfsConfig.host}:${config.ipfsConfig.port}/api/v0/cat`
   const params = {
     arg: hash,
   }
   
-  /* arraybuffer to prevent automatic parsing of response data as JSON */
-  const res = await axios.get(url, {params, responseType: 'arraybuffer'})
-  return res.data.toString()
+  try {
+    /* arraybuffer to prevent automatic parsing of response data as JSON */
+    const res = await axios.get(url, {params, responseType: 'arraybuffer'})
+    return res.data.toString()
+  } catch(e) {
+    console.log(`Error in block ${JSON.stringify(block)}: ${e}`)
+  }
 }
 main()
